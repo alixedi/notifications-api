@@ -457,6 +457,11 @@ def get_rate(
     if notification_type == LETTER_TYPE:
         if letter_page_count == 0:
             return 0
+
+        # get the version from the model
+        if post_class in ('europe', 'rest-of-world'):
+            post_class = 'international'
+
         return next(
             r.rate
             for r in letter_rates if (

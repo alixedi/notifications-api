@@ -243,6 +243,14 @@ def test_create_nightly_billing_for_day_different_letter_postage(
         billable_units=2,
         postage='second'
     )
+    create_notification(
+        created_at=yesterday,
+        template=sample_letter_template,
+        status='delivered',
+        sent_by='dvla',
+        billable_units=1,
+        postage='europe'
+    )
 
     records = FactBilling.query.all()
     assert len(records) == 0
@@ -263,6 +271,12 @@ def test_create_nightly_billing_for_day_different_letter_postage(
     assert records[1].postage == 'second'
     assert records[1].notifications_sent == 1
     assert records[1].billable_units == 2
+
+    assert records[1].notification_type == LETTER_TYPE
+    assert records[1].bst_date == datetime.date(yesterday)
+    assert records[1].postage == 'europe'
+    assert records[1].notifications_sent == 1
+    assert records[1].billable_units == 1
 
 
 def test_create_nightly_billing_for_day_letter(
