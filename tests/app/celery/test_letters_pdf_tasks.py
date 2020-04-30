@@ -6,7 +6,6 @@ from moto import mock_s3
 from flask import current_app
 from freezegun import freeze_time
 import pytest
-import requests_mock
 from botocore.exceptions import ClientError
 from celery.exceptions import MaxRetriesExceededError
 from requests import RequestException
@@ -17,7 +16,6 @@ from app.errors import VirusScanError
 from app.exceptions import NotificationTechnicalFailureException
 from app.celery.letters_pdf_tasks import (
     create_letters_pdf,
-    get_letters_pdf,
     collate_letter_pdfs_to_be_sent,
     get_key_and_size_of_letters_to_be_sent_to_print,
     group_letters,
@@ -26,6 +24,7 @@ from app.celery.letters_pdf_tasks import (
     process_virus_scan_error,
     replay_letters_in_error,
     sanitise_letter,
+    update_billable_units_for_letter,
     _move_invalid_letter_and_update_status,
 )
 from app.config import QueueNames, TaskNames
@@ -56,105 +55,8 @@ def test_should_have_decorated_tasks_functions():
     assert process_sanitised_letter.__wrapped__.__name__ == 'process_sanitised_letter'
 
 
-@pytest.mark.parametrize('personalisation', [{'name': 'test'}, None])
-def test_get_letters_pdf_calls_notifications_template_preview_service_correctly(
-        notify_api, mocker, client, sample_letter_template, personalisation):
-    contact_block = 'Mr Foo,\n1 Test Street,\nLondon\nN1'
-    filename = 'opg'
-
-    with set_config_values(notify_api, {
-        'TEMPLATE_PREVIEW_API_HOST': 'http://localhost/notifications-template-preview',
-        'TEMPLATE_PREVIEW_API_KEY': 'test-key'
-    }):
-        with requests_mock.Mocker() as request_mock:
-            mock_post = request_mock.post(
-                'http://localhost/notifications-template-preview/print.pdf', content=b'\x00\x01', status_code=200)
-
-            get_letters_pdf(
-                sample_letter_template,
-                contact_block=contact_block,
-                filename=filename,
-                values=personalisation)
-
-    assert mock_post.last_request.json() == {
-        'values': personalisation,
-        'letter_contact_block': contact_block,
-        'filename': filename,
-        'template': {
-            'subject': sample_letter_template.subject,
-            'content': sample_letter_template.content,
-            'template_type': sample_letter_template.template_type
-        }
-    }
-
-
-@pytest.mark.parametrize('page_count,expected_billable_units', [
-    ('1', 1),
-    ('2', 1),
-    ('3', 2)
-])
-def test_get_letters_pdf_calculates_billing_units(
-        notify_api, mocker, client, sample_letter_template, page_count, expected_billable_units):
-    contact_block = 'Mr Foo,\n1 Test Street,\nLondon\nN1'
-    filename = 'opg'
-
-    with set_config_values(notify_api, {
-        'TEMPLATE_PREVIEW_API_HOST': 'http://localhost/notifications-template-preview',
-        'TEMPLATE_PREVIEW_API_KEY': 'test-key'
-    }):
-        with requests_mock.Mocker() as request_mock:
-            request_mock.post(
-                'http://localhost/notifications-template-preview/print.pdf',
-                content=b'\x00\x01',
-                headers={'X-pdf-page-count': page_count},
-                status_code=200
-            )
-
-            _, billable_units = get_letters_pdf(
-                sample_letter_template, contact_block=contact_block, filename=filename, values=None)
-
-    assert billable_units == expected_billable_units
-
-
-@freeze_time("2017-12-04 17:31:00")
-def test_create_letters_pdf_calls_s3upload(mocker, sample_letter_template):
-    mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', return_value=(b'\x00\x01', '1'))
-    mock_s3 = mocker.patch('app.letters.utils.s3upload')
-    notification = create_notification(template=sample_letter_template, reference='FOO', key_type='normal')
-
-    create_letters_pdf(notification.id)
-
-    mock_s3.assert_called_with(
-        bucket_name=current_app.config['LETTERS_PDF_BUCKET_NAME'],
-        file_location='2017-12-05/NOTIFY.FOO.D.2.C.C.20171204173100.PDF',
-        filedata=b'\x00\x01',
-        region=current_app.config['AWS_REGION']
-    )
-
-
-@freeze_time("2017-12-04 17:31:00")
-def test_create_letters_pdf_calls_s3upload_for_test_letters(mocker, sample_letter_template):
-    mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', return_value=(b'\x00\x01', '1'))
-    mock_s3 = mocker.patch('app.letters.utils.s3upload')
-    notification = create_notification(template=sample_letter_template, reference='FOO', key_type='test')
-
-    create_letters_pdf(notification.id)
-
-    mock_s3.assert_called_with(
-        bucket_name=current_app.config['TEST_LETTERS_BUCKET_NAME'],
-        file_location='NOTIFY.FOO.D.2.C.C.20171204173100.PDF',
-        filedata=b'\x00\x01',
-        region=current_app.config['AWS_REGION']
-    )
-
-
-def test_create_letters_pdf_sets_billable_units(mocker, sample_letter_notification):
-    mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', return_value=(b'\x00\x01', 1))
-    mocker.patch('app.letters.utils.s3upload')
-
-    create_letters_pdf(sample_letter_notification.id)
-    noti = Notification.query.filter(Notification.reference == sample_letter_notification.reference).one()
-    assert noti.billable_units == 1
+def test_create_letters_pdf():
+    pass
 
 
 def test_create_letters_pdf_non_existent_notification(notify_api, mocker, fake_uuid):
@@ -236,6 +138,12 @@ def test_create_letters_gets_the_right_logo_when_service_has_letter_branding_log
         filename=sample_letter_notification.service.letter_branding.filename,
         values=sample_letter_notification.personalisation
     )
+
+
+def test_update_billable_units_for_letter(mocker, sample_letter_notification):
+    update_billable_units_for_letter(sample_letter_notification.id, 2)
+    noti = Notification.query.filter(Notification.reference == sample_letter_notification.reference).one()
+    assert noti.billable_units == 1
 
 
 @freeze_time('2020-02-17 18:00:00')
