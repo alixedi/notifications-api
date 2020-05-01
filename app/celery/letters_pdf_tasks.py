@@ -72,11 +72,11 @@ def create_letters_pdf(self, notification_id):
             'key_type': notification.key_type
         }
 
-        encrypted_data = encryption.encrypt(letter_data)
+        # encrypted_data = encryption.encrypt(letter_data)
 
         notify_celery.send_task(
             name=TaskNames.CREATE_LETTER_PDF,
-            args=(encrypted_data,),
+            args=(letter_data,),
             queue=QueueNames.LETTERS
         )
     except Exception:

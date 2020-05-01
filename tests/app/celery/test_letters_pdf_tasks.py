@@ -55,8 +55,32 @@ def test_should_have_decorated_tasks_functions():
     assert process_sanitised_letter.__wrapped__.__name__ == 'process_sanitised_letter'
 
 
-def test_create_letters_pdf():
-    pass
+def test_create_letters_pdf_mmmf(mocker, sample_letter_notification):
+    mock_celery = mocker.patch('app.celery.letters_pdf_tasks.notify_celery.send_task')
+    mocker.patch('app.celery.letters_pdf_tasks.get_letter_pdf_filename', return_value='LETTER.PDF')
+    create_letters_pdf(sample_letter_notification.id)
+
+    letter_data = {
+        'letter_contact_block': sample_letter_notification.reply_to_text,
+        'template': {
+            "subject": sample_letter_notification.template.subject,
+            "content": sample_letter_notification.template.content,
+            "template_type": sample_letter_notification.template.template_type
+        },
+        'values': sample_letter_notification.personalisation,
+        'logo_filename': sample_letter_notification.service.letter_branding and sample_letter_notification.service.letter_branding.filename,  # noqa
+        'letter_filename': 'LETTER.PDF',
+        "notification_id": sample_letter_notification.id,
+        'key_type': sample_letter_notification.key_type
+    }
+
+    encrypted_data = encryption.encrypt(letter_data)
+
+    mock_celery.assert_called_once_with(
+        name=TaskNames.CREATE_LETTER_PDF,
+        args=(encrypted_data,),
+        queue=QueueNames.LETTERS
+    )
 
 
 def test_create_letters_pdf_non_existent_notification(notify_api, mocker, fake_uuid):
