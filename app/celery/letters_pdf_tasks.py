@@ -77,7 +77,7 @@ def create_letters_pdf(self, notification_id):
         notify_celery.send_task(
             name=TaskNames.CREATE_LETTER_PDF,
             args=(encrypted_data,),
-            queue=QueueNames.LETTERS
+            queue=QueueNames.SANITISE_LETTERS
         )
     except Exception:
         try:

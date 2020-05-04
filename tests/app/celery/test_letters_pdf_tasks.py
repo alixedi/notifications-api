@@ -78,7 +78,7 @@ def test_create_letters_pdf(mocker, sample_letter_notification):
     mock_celery.assert_called_once_with(
         name=TaskNames.CREATE_LETTER_PDF,
         args=(encrypted_data,),
-        queue=QueueNames.LETTERS
+        queue=QueueNames.SANITISE_LETTERS
     )
 
 
@@ -142,7 +142,7 @@ def test_create_letters_gets_the_right_logo_when_service_has_letter_branding_log
     mock_celery.assert_called_once_with(
         name=TaskNames.CREATE_LETTER_PDF,
         args=(encrypted_data,),
-        queue=QueueNames.LETTERS
+        queue=QueueNames.SANITISE_LETTERS
     )
 
 
