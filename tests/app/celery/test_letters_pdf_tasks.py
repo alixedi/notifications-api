@@ -100,14 +100,16 @@ def test_create_letters_pdf_retries_upon_error(mocker, sample_letter_notificatio
 
 
 def test_create_letters_pdf_sets_technical_failure_max_retries(mocker, sample_letter_notification):
-    mock_get_letters_pdf = mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', side_effect=RequestException)
+    mock_celery = mocker.patch('app.celery.letters_pdf_tasks.notify_celery.send_task', side_effect=Exception())
+    mocker.patch('app.celery.letters_pdf_tasks.get_letter_pdf_filename', return_value='LETTER.PDF')
     mock_retry = mocker.patch(
         'app.celery.letters_pdf_tasks.create_letters_pdf.retry', side_effect=MaxRetriesExceededError)
     mock_update_noti = mocker.patch('app.celery.letters_pdf_tasks.update_notification_status_by_id')
 
-    create_letters_pdf(sample_letter_notification.id)
+    with pytest.raises(NotificationTechnicalFailureException):
+        create_letters_pdf(sample_letter_notification.id)
 
-    assert mock_get_letters_pdf.called
+    assert mock_celery.called
     assert mock_retry.called
     mock_update_noti.assert_called_once_with(sample_letter_notification.id, 'technical-failure')
 
