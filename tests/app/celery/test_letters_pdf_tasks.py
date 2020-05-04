@@ -8,7 +8,6 @@ from freezegun import freeze_time
 import pytest
 from botocore.exceptions import ClientError
 from celery.exceptions import MaxRetriesExceededError
-from requests import RequestException
 from sqlalchemy.orm.exc import NoResultFound
 
 from app import encryption
@@ -55,7 +54,7 @@ def test_should_have_decorated_tasks_functions():
     assert process_sanitised_letter.__wrapped__.__name__ == 'process_sanitised_letter'
 
 
-def test_create_letters_pdf_mmmf(mocker, sample_letter_notification):
+def test_create_letters_pdf(mocker, sample_letter_notification):
     mock_celery = mocker.patch('app.celery.letters_pdf_tasks.notify_celery.send_task')
     mocker.patch('app.celery.letters_pdf_tasks.get_letter_pdf_filename', return_value='LETTER.PDF')
     create_letters_pdf(sample_letter_notification.id)

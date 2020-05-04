@@ -82,14 +82,14 @@ def create_letters_pdf(self, notification_id):
     except Exception:
         try:
             current_app.logger.exception(
-                "RETRY: calling create-letter-pdf task for notification {} failed".format(notification.id)
+                "RETRY: calling create-letter-pdf task for notification {} failed".format(notification_id)
             )
             self.retry(queue=QueueNames.RETRY)
         except self.MaxRetriesExceededError:
             message = "RETRY FAILED: Max retries reached. " \
                       "The task create-letter-pdf failed for notification {}. " \
-                      "Notification has been updated to technical-failure".format(notification.id)
-            update_notification_status_by_id(notification.id, NOTIFICATION_TECHNICAL_FAILURE)
+                      "Notification has been updated to technical-failure".format(notification_id)
+            update_notification_status_by_id(notification_id, NOTIFICATION_TECHNICAL_FAILURE)
             raise NotificationTechnicalFailureException(message)
 
 
