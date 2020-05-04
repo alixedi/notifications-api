@@ -88,31 +88,14 @@ def test_create_letters_pdf_non_existent_notification(notify_api, mocker, fake_u
         create_letters_pdf(fake_uuid)
 
 
-def test_create_letters_pdf_handles_request_errors(mocker, sample_letter_notification):
-    mock_get_letters_pdf = mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', side_effect=RequestException)
+def test_create_letters_pdf_retries_upon_error(mocker, sample_letter_notification):
+    mock_celery = mocker.patch('app.celery.letters_pdf_tasks.notify_celery.send_task', side_effect=Exception())
+    mocker.patch('app.celery.letters_pdf_tasks.get_letter_pdf_filename', return_value='LETTER.PDF')
     mock_retry = mocker.patch('app.celery.letters_pdf_tasks.create_letters_pdf.retry')
 
     create_letters_pdf(sample_letter_notification.id)
 
-    assert mock_get_letters_pdf.called
-    assert mock_retry.called
-
-
-def test_create_letters_pdf_handles_s3_errors(mocker, sample_letter_notification):
-    mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', return_value=(b'\x00\x01', 1))
-    error_response = {
-        'Error': {
-            'Code': 'InvalidParameterValue',
-            'Message': 'some error message from amazon',
-            'Type': 'Sender'
-        }
-    }
-    mock_s3 = mocker.patch('app.letters.utils.s3upload', side_effect=ClientError(error_response, 'operation_name'))
-    mock_retry = mocker.patch('app.celery.letters_pdf_tasks.create_letters_pdf.retry')
-
-    create_letters_pdf(sample_letter_notification.id)
-
-    assert mock_s3.called
+    assert mock_celery.called
     assert mock_retry.called
 
 
