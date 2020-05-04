@@ -68,7 +68,7 @@ def test_create_letters_pdf_mmmf(mocker, sample_letter_notification):
             "template_type": sample_letter_notification.template.template_type
         },
         'values': sample_letter_notification.personalisation,
-        'logo_filename': sample_letter_notification.service.letter_branding and sample_letter_notification.service.letter_branding.filename,  # noqa
+        'logo_filename': None,  # no logo
         'letter_filename': 'LETTER.PDF',
         "notification_id": str(sample_letter_notification.id),
         'key_type': sample_letter_notification.key_type
@@ -114,38 +114,36 @@ def test_create_letters_pdf_sets_technical_failure_max_retries(mocker, sample_le
     mock_update_noti.assert_called_once_with(sample_letter_notification.id, 'technical-failure')
 
 
-def test_create_letters_gets_the_right_logo_when_service_has_no_logo(
-        notify_api, mocker, sample_letter_notification
-):
-    mock_get_letters_pdf = mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', return_value=(b'\x00\x01', 1))
-    mocker.patch('app.letters.utils.s3upload')
-    mocker.patch('app.celery.letters_pdf_tasks.update_notification_status_by_id')
-
-    create_letters_pdf(sample_letter_notification.id)
-    mock_get_letters_pdf.assert_called_once_with(
-        sample_letter_notification.template,
-        contact_block=sample_letter_notification.reply_to_text,
-        filename=None,
-        values=sample_letter_notification.personalisation
-    )
-
-
 # We only need this while we are migrating to the new letter_branding model
 def test_create_letters_gets_the_right_logo_when_service_has_letter_branding_logo(
         notify_api, mocker, sample_letter_notification
 ):
     letter_branding = create_letter_branding(name='test brand', filename='test-brand')
     sample_letter_notification.service.letter_branding = letter_branding
-    mock_get_letters_pdf = mocker.patch('app.celery.letters_pdf_tasks.get_letters_pdf', return_value=(b'\x00\x01', 1))
-    mocker.patch('app.letters.utils.s3upload')
-    mocker.patch('app.celery.letters_pdf_tasks.update_notification_status_by_id')
-
+    mock_celery = mocker.patch('app.celery.letters_pdf_tasks.notify_celery.send_task')
+    mocker.patch('app.celery.letters_pdf_tasks.get_letter_pdf_filename', return_value='LETTER.PDF')
     create_letters_pdf(sample_letter_notification.id)
-    mock_get_letters_pdf.assert_called_once_with(
-        sample_letter_notification.template,
-        contact_block=sample_letter_notification.reply_to_text,
-        filename=sample_letter_notification.service.letter_branding.filename,
-        values=sample_letter_notification.personalisation
+
+    letter_data = {
+        'letter_contact_block': sample_letter_notification.reply_to_text,
+        'template': {
+            "subject": sample_letter_notification.template.subject,
+            "content": sample_letter_notification.template.content,
+            "template_type": sample_letter_notification.template.template_type
+        },
+        'values': sample_letter_notification.personalisation,
+        'logo_filename': sample_letter_notification.service.letter_branding.filename,
+        'letter_filename': 'LETTER.PDF',
+        "notification_id": str(sample_letter_notification.id),
+        'key_type': sample_letter_notification.key_type
+    }
+
+    encrypted_data = encryption.encrypt(letter_data)
+
+    mock_celery.assert_called_once_with(
+        name=TaskNames.CREATE_LETTER_PDF,
+        args=(encrypted_data,),
+        queue=QueueNames.LETTERS
     )
 
 
