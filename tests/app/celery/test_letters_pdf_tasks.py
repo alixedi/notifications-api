@@ -70,7 +70,7 @@ def test_create_letters_pdf_mmmf(mocker, sample_letter_notification):
         'values': sample_letter_notification.personalisation,
         'logo_filename': sample_letter_notification.service.letter_branding and sample_letter_notification.service.letter_branding.filename,  # noqa
         'letter_filename': 'LETTER.PDF',
-        "notification_id": sample_letter_notification.id,
+        "notification_id": str(sample_letter_notification.id),
         'key_type': sample_letter_notification.key_type
     }
 
